@@ -1,6 +1,11 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{
+    extract::{ws::WebSocket, ConnectInfo, WebSocketUpgrade},
+    response::{Html, IntoResponse, Response},
+    routing::get,
+    Router,
+};
 use tower_http::{
     services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
@@ -26,6 +31,7 @@ async fn main() {
 
     let app = Router::new()
         .fallback_service(ServeDir::new(assets_dir).append_index_html_on_directories(true))
+        .route("/", get(index_get))
         .route("/ws", get(ws_handler))
         // logging so we can see whats going on
         .layer(
@@ -33,13 +39,32 @@ async fn main() {
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
         );
 
-    tracing::debug!("listening on 127.0.0.1:3000");
+    tracing::info!("listening on 127.0.0.1:3000");
     axum::Server::bind(&SocketAddr::from(([127, 0, 0, 1], 3000)))
         .serve(app.into_make_service())
         .await
         .unwrap();
 }
 
-async fn ws_handler() -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade) -> Response {
     tracing::info!("Request done on endpoint /ws");
+    ws.on_upgrade(move |socket| handle_connection(socket))
+}
+
+async fn handle_connection(mut socket: WebSocket) {
+    tracing::info!("New websocket connection: {:?}", socket);
+    while let Some(msg) = socket.recv().await {
+        let msg = if let Ok(msg) = msg {
+            tracing::info!("Received message: {:?}", msg);
+            socket.send(msg).await.unwrap();
+        } else {
+            // client disconnected
+            return;
+        };
+    }
+}
+
+async fn index_get() -> impl IntoResponse {
+    tracing::info!("Request done on endpoint /");
+    Html(include_str!("../../game/src/index.html").to_string())
 }
