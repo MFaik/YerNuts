@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use axum::{
-    extract::{ws::WebSocket, ConnectInfo, WebSocketUpgrade},
+    extract::{ws::WebSocket, WebSocketUpgrade},
     response::{Html, IntoResponse, Response},
     routing::get,
     Router,
@@ -54,7 +54,7 @@ async fn ws_handler(ws: WebSocketUpgrade) -> Response {
 async fn handle_connection(mut socket: WebSocket) {
     tracing::info!("New websocket connection: {:?}", socket);
     while let Some(msg) = socket.recv().await {
-        let msg = if let Ok(msg) = msg {
+        if let Ok(msg) = msg {
             tracing::info!("Received message: {:?}", msg);
             socket.send(msg).await.unwrap();
         } else {
